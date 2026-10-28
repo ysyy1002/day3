@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script>
+        // ───── 1. 함수 정의 (기능을 "만들어 두기"만 하고, 아직 실행은 안 됨) ─────
+        // ({a,b,z}) : 객체를 통째로 받지 않고, 받는 순간 안의 a, b, z 를 바로 꺼내 변수로 쓴다
+        //             (구조 분해 할당). 객체의 이름(key)과 변수 이름이 같아야 한다.
+        const f= (  {a,b,z }) => {//i변수에는 객체가 온다 {"a":10}
+           // console.log(i) //함수 (기능), 기능 함수 정의 (만들다)
+            // i.a 처럼 "i." 를 붙일 필요 없이 a, b, z 를 바로 계산에 쓴다: a × 10 × b × z
+            // return = 계산 결과를 함수를 부른 곳으로 "돌려준다"
+            return a*10*b*z
+        }
+
+        // ───── 2. 함수 호출 (정의해 둔 기능을 "실제로 실행") ─────
+        //사용하는 쪼게서 호출 (call) =>실행
+        // 객체 = { 이름: 값 } 묶음. a 는 10, b 는 1000, z 는 5
+        let u= {"a":10,"b":1000, "z":5} //변수 u에는 객체가 저장되어 있다.
+        // f(u): u 를 넘기면 a=10, b=1000, z=5 로 꺼내져 10 × 10 × 1000 × 5 = 500000 이 돌아와 변수 a 에 저장됨
+        // (함수 안의 a 와 여기 바깥의 a 는 서로 다른 변수라 충돌하지 않는다)
+        let a= f(u)
+        // 결과 출력 → 500000
+        console.log(a)
+    </script>
+</body>
+</html>

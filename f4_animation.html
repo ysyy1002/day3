@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>f4.html 코드 애니메이션</title>
+    <style>
+        body { margin: 0; padding: 16px; font-family: sans-serif; background: #1e1e1e; color: #ddd; }
+        h1 { font-size: 18px; margin: 0 0 12px; }
+        #main { display: flex; gap: 16px; flex-wrap: wrap; }
+        .panel { background: #252526; border-radius: 8px; padding: 12px; }
+        #code { flex: 1 1 380px; font-family: Consolas, monospace; font-size: 15px; }
+        #code div { padding: 3px 8px; border-left: 4px solid transparent; white-space: pre; }
+        #code div.on { background: #3a3d1f; border-left-color: #ffd54f; }
+        #right { flex: 1 1 380px; display: flex; flex-direction: column; gap: 12px; }
+        h2 { font-size: 13px; color: #9e9e9e; margin: 0 0 8px; font-weight: normal; }
+        .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-height: 56px; }
+        .box { min-width: 56px; padding: 10px 14px; border: 2px solid #555; border-radius: 6px; text-align: center; font-family: Consolas, monospace; font-size: 18px; transition: all .4s; position: relative; }
+        .box small { display: block; font-size: 11px; color: #888; }
+        .box.cur { border-color: #ffd54f; background: #4a4420; transform: translateY(-6px); }
+        .box.done { opacity: .5; }
+        .var { border-color: #4fc3f7; }
+        .pop { animation: pop .5s; }
+        @keyframes pop { 0% { transform: scale(1.5); background: #1b5e20; } 100% { transform: scale(1); } }
+        #fbox { border-color: #ba68c8; min-width: 160px; }
+        #console { font-family: Consolas, monospace; min-height: 70px; color: #a5d6a7; }
+        #msg { background: #263238; border-radius: 8px; padding: 12px; min-height: 44px; font-size: 15px; }
+        #ctl { margin-top: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        button { padding: 8px 14px; font-size: 14px; border: 0; border-radius: 6px; background: #0e639c; color: #fff; cursor: pointer; }
+        button:disabled { background: #444; cursor: default; }
+    </style>
+</head>
+<body>
+    <h1>f4.html 한 줄씩 따라가기</h1>
+    <div id="main">
+        <div id="code" class="panel"></div>
+        <div id="right">
+            <div id="msg" class="panel"></div>
+            <div class="panel"><h2>arr 배열 (for…of 가 하나씩 꺼내는 중)</h2><div id="arr" class="row"></div></div>
+            <div class="panel"><h2>변수</h2><div id="vars" class="row"></div></div>
+            <div class="panel"><h2>함수 f 실행</h2><div id="fbox" class="box">아직 호출 안 됨</div></div>
+            <div class="panel"><h2>콘솔 출력</h2><div id="console"></div></div>
+        </div>
+    </div>
+    <div id="ctl">
+        <button id="first">⏮ 처음</button>
+        <button id="prev">◀ 이전</button>
+        <button id="next">다음 ▶</button>
+        <button id="auto">▶ 자동재생</button>
+        <span id="count"></span>
+    </div>
+
+    <script>
+        // 화면에 보여줄 원본 코드 (줄 번호 = 배열 위치 + 10)
+        const CODE = [
+            "const f= (i) => i*3",
+            "let arr =[10,20,30]",
+            "let sum=0",
+            "for (const v of arr) {",
+            "    console.log('v='+ v)",
+            "    sum = sum +f(v)",
+            "}",
+            "console.log(sum)",
+        ]
+        const L = { f: 0, arr: 1, sum: 2, loop: 3, log: 4, add: 5, end: 6, out: 7 }
+        const code = document.getElementById("code")
+        CODE.forEach((t, i) => { const d = document.createElement("div"); d.textContent = (i + 1 + "").padStart(2) + "  " + t; code.appendChild(d) })
+
+        // 코드를 실제 규칙대로 돌려, 단계별 상태를 미리 만들어 둠
+        const arr = [10, 20, 30]
+        const steps = []
+        let sum = 0, logs = []
+        const push = (line, msg, extra) => steps.push(Object.assign({ line, msg, sum, logs: logs.slice(), vars: { arr: false, sum: false }, idx: -1, v: null, f: null }, extra))
+        push(L.f, "함수 f 를 <b>만들어 둡니다</b>. 아직 실행은 안 해요. f 는 받은 값에 3을 곱해 돌려주는 기능입니다.")
+        push(L.arr, "배열 arr 를 만들어 10, 20, 30 을 넣습니다.", { vars: { arr: true, sum: false } })
+        push(L.sum, "합계를 담을 변수 sum 을 <b>0</b> 으로 시작합니다.", { vars: { arr: true, sum: true } })
+        for (let k = 0; k < arr.length; k++) {
+            const v = arr[k], base = { vars: { arr: true, sum: true }, idx: k, v }
+            push(L.loop, "for…of: arr 에서 <b>" + (k + 1) + "번째 값 " + v + "</b> 을 꺼내 v 에 넣습니다.", base)
+            logs = logs.concat("v=" + v)
+            push(L.log, "콘솔에 'v=' 와 v 를 이어서 출력합니다.", base)
+            const r = v * 3
+            push(L.add, "f(" + v + ") 를 호출 → " + v + " × 3 = <b>" + r + "</b>. 이 값을 sum 에 더합니다. (" + sum + " + " + r + " = " + (sum + r) + ")",
+                Object.assign({}, base, { f: v + " × 3 = " + r }))
+            sum += r
+            push(L.add, "sum 이 <b>" + sum + "</b> 이 되었습니다.", Object.assign({}, base, { f: v + " × 3 = " + r, pop: true }))
+        }
+        push(L.loop, "더 꺼낼 값이 없어서 반복이 끝납니다.", { vars: { arr: true, sum: true }, idx: arr.length })
+        logs = logs.concat(String(sum))
+        push(L.out, "최종 sum <b>" + sum + "</b> 을 출력합니다. (30 + 60 + 90)", { vars: { arr: true, sum: true }, idx: arr.length, pop: true })
+
+        let n = 0, timer = null
+        const $ = (id) => document.getElementById(id)
+        const render = () => {
+            const s = steps[n]
+            ;[...code.children].forEach((d, i) => d.classList.toggle("on", i === s.line))
+            $("msg").innerHTML = s.msg
+            $("arr").innerHTML = s.vars.arr ? arr.map((x, i) =>
+                "<div class='box " + (i === s.idx ? "cur" : i < s.idx ? "done" : "") + "'><small>[" + i + "]</small>" + x + "</div>").join("") : "<span style='color:#666'>아직 없음</span>"
+            $("vars").innerHTML =
+                (s.v !== null && s.idx < arr.length ? "<div class='box var'><small>v</small>" + s.v + "</div>" : "") +
+                (s.vars.sum ? "<div class='box var " + (s.pop ? "pop" : "") + "'><small>sum</small>" + s.sum + "</div>" : "")
+            $("fbox").textContent = s.f || "아직 호출 안 됨"
+            $("console").innerHTML = s.logs.map(t => "&gt; " + t).join("<br>")
+            $("count").textContent = (n + 1) + " / " + steps.length
+            $("prev").disabled = $("first").disabled = n === 0
+            $("next").disabled = n === steps.length - 1
+        }
+        const stop = () => { clearInterval(timer); timer = null; $("auto").textContent = "▶ 자동재생" }
+        $("next").onclick = () => { if (n < steps.length - 1) { n++; render() } }
+        $("prev").onclick = () => { stop(); if (n > 0) { n--; render() } }
+        $("first").onclick = () => { stop(); n = 0; render() }
+        $("auto").onclick = () => {
+            if (timer) return stop()
+            if (n === steps.length - 1) n = 0
+            $("auto").textContent = "⏸ 멈춤"
+            render()
+            timer = setInterval(() => { if (n < steps.length - 1) { n++; render() } else stop() }, 1500)
+        }
+        render()
+    </script>
+</body>
+</html>
