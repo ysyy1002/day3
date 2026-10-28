@@ -3,98 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 전 세계 지진 지도</title>
+    <title>제주 날씨 맞춤 추천 에이전트</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <style>
-        body { margin: 0; font-family: sans-serif; background: #111; color: #eee; }
-        #bar { padding: 10px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-        #bar b { font-size: 18px; }
-        #wrap { display: flex; height: calc(100vh - 56px); }
+        body { margin: 0; font-family: sans-serif; }
+        #wrap { display: flex; height: 100vh; }
+        #chat { width: 380px; display: flex; flex-direction: column; border-right: 1px solid #ddd; }
+        #log { flex: 1; overflow-y: auto; padding: 10px; }
+        .me { background: #e3f2fd; padding: 8px 10px; border-radius: 8px; margin: 6px 0 6px 40px; }
+        .bot { background: #f5f5f5; padding: 8px 10px; border-radius: 8px; margin: 6px 40px 6px 0; white-space: pre-wrap; }
+        .step { font-size: 12px; color: #666; margin: 2px 0 2px 4px; }
+        #form { display: flex; gap: 6px; padding: 10px; border-top: 1px solid #ddd; }
+        #q { flex: 1; padding: 8px; }
         #map { flex: 1; }
-        #list { width: 280px; overflow-y: auto; font-size: 13px; }
-        #list div { padding: 8px 10px; border-bottom: 1px solid #333; cursor: pointer; }
-        #list div:hover { background: #222; }
-        .mag { font-weight: bold; }
-        .pulse { animation: pulse 1.4s ease-out infinite; }
-        @keyframes pulse { 0% { opacity: .9; } 100% { opacity: .15; } }
-        @media (max-width: 700px) { #wrap { flex-direction: column; } #list { width: auto; height: 35%; } }
+        #note { font-size: 11px; color: #888; padding: 0 10px 8px; }
+        @media (max-width: 700px) { #wrap { flex-direction: column-reverse; } #chat { width: auto; height: 55%; } }
     </style>
 </head>
 <body>
-    <div id="bar">
-        <b>🌍 실시간 지진</b>
-        <label>기간
-            <select id="feed">
-                <option value="all_hour">최근 1시간</option>
-                <option value="all_day" selected>최근 24시간</option>
-                <option value="2.5_week">최근 7일 (규모 2.5+)</option>
-                <option value="4.5_week">최근 7일 (규모 4.5+)</option>
-            </select>
-        </label>
-        <span id="msg">불러오는 중…</span>
-    </div>
     <div id="wrap">
+        <div id="chat">
+            <div id="log">
+                <div class="bot">제주 여행을 물어보세요. 날씨와 장소 목록을 직접 확인해 추천해 드려요.
+예) 내일 서귀포에서 가기 좋은 곳 알려줘</div>
+            </div>
+            <div id="note">※ 지도 마커는 목록에 좌표가 없어 각 지역 중심 근처에 흩어 찍은 대략적인 위치입니다.</div>
+            <form id="form">
+                <input id="q" placeholder="무엇이든 물어보세요" autocomplete="off">
+                <button id="send">보내기</button>
+            </form>
+        </div>
         <div id="map"></div>
-        <div id="list"></div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // USGS 지진 피드 (API 키 불필요)
-        const URL_BASE = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/"
+        const CENTER = {
+            "동쪽(성산)": [33.45, 126.92], "동쪽(구좌)": [33.52, 126.85],
+            "서쪽(한림)": [33.40, 126.27], "서쪽(안덕)": [33.28, 126.33],
+            "제주시": [33.50, 126.53], "서귀포": [33.26, 126.56],
+        }
+        const TOOL_NAME = { find_spots: "🗺️ 장소 검색", get_weather: "☀️ 날씨 조회" }
 
-        const map = L.map("map", { worldCopyJump: true }).setView([20, 130], 3)
+        const map = L.map("map").setView([33.38, 126.55], 10)
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
             maxZoom: 19,
-            attribution: "&copy; OpenStreetMap contributors | 데이터: USGS",
+            attribution: "&copy; OpenStreetMap contributors | 날씨: Open-Meteo",
         }).addTo(map)
         const layer = L.layerGroup().addTo(map)
 
-        // 규모가 클수록 크고 붉게
-        const color = (m) => m >= 6 ? "#ff1744" : m >= 5 ? "#ff6d00" : m >= 4 ? "#ffc400" : m >= 3 ? "#c6ff00" : "#69f0ae"
-        const radius = (m) => Math.max(3, m * m * 1.6)
-        const ago = (t) => {
-            const min = Math.round((Date.now() - t) / 60000)
-            return min < 60 ? min + "분 전" : min < 1440 ? Math.round(min / 60) + "시간 전" : Math.round(min / 1440) + "일 전"
+        // 같은 지역 장소가 한 점에 겹치지 않도록 이름으로 만든 값으로 조금씩 흩뜨림
+        const place = (s) => {
+            let h = 0
+            for (const ch of s.name) h = (h * 31 + ch.charCodeAt(0)) % 1000
+            const [lat, lon] = CENTER[s.areas[0]]
+            return [lat + (h % 10 - 4.5) * 0.008, lon + (Math.floor(h / 10) % 10 - 4.5) * 0.008]
         }
 
-        const load = () => {
-            fetch(URL_BASE + document.getElementById("feed").value + ".geojson")
-                .then(r => r.json())
-                .then(d => {
-                    layer.clearLayers()
-                    const list = document.getElementById("list")
-                    list.innerHTML = ""
-                    const now = Date.now()
-                    // 강한 지진부터 목록에 표시
-                    const sorted = d.features.filter(f => f.properties.mag != null)
-                        .sort((a, b) => b.properties.mag - a.properties.mag)
-                    for (const f of sorted) {
-                        const p = f.properties
-                        const [lon, lat, depth] = f.geometry.coordinates
-                        const fresh = now - p.time < 3600000   // 1시간 이내는 깜빡임
-                        const c = L.circleMarker([lat, lon], {
-                            radius: radius(p.mag), color: color(p.mag), fillColor: color(p.mag),
-                            fillOpacity: 0.45, weight: 1, className: fresh ? "pulse" : "",
-                        }).addTo(layer)
-                        c.bindPopup("<b>M " + p.mag.toFixed(1) + "</b> " + p.place + "<br>" + ago(p.time) +
-                            " · 깊이 " + Math.round(depth) + "km<br><a href='" + p.url + "' target='_blank'>USGS 상세</a>")
-                        if (list.children.length < 50) {
-                            const row = document.createElement("div")
-                            row.innerHTML = "<span class='mag' style='color:" + color(p.mag) + "'>M " + p.mag.toFixed(1) +
-                                "</span> " + p.place + "<br><small>" + ago(p.time) + "</small>"
-                            row.onclick = () => { map.setView([lat, lon], 6); c.openPopup() }
-                            list.appendChild(row)
-                        }
-                    }
-                    document.getElementById("msg").textContent = "총 " + sorted.length + "건 · 1분마다 자동 갱신"
+        const log = document.getElementById("log")
+        const add = (cls, text) => {
+            const el = document.createElement("div")
+            el.className = cls
+            el.textContent = text
+            log.appendChild(el)
+            log.scrollTop = log.scrollHeight
+            return el
+        }
+
+        document.getElementById("form").onsubmit = async (e) => {
+            e.preventDefault()
+            const q = document.getElementById("q")
+            const message = q.value.trim()
+            if (!message) return
+            q.value = ""
+            add("me", message)
+            const wait = add("step", "생각하는 중…")
+            document.getElementById("send").disabled = true
+            try {
+                const r = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ message }),
                 })
-                .catch(() => document.getElementById("msg").textContent = "데이터를 불러오지 못했습니다.")
-        }
+                const d = await r.json()
+                wait.remove()
+                if (d.error) { add("bot", "오류: " + d.error); return }
+                for (const s of d.steps) add("step", (TOOL_NAME[s.tool] || s.tool) + " " + JSON.stringify(s.input))
+                add("bot", d.reply)
 
-        document.getElementById("feed").onchange = load
-        load()
-        setInterval(load, 60000)
+                layer.clearLayers()
+                for (const s of d.spots) {
+                    L.marker(place(s)).addTo(layer)
+                        .bindPopup("<b>" + s.name + "</b><br>" + s.areas[0] + " · " + (s.indoor ? "실내" : "야외") + "<br>" + s.description)
+                }
+                if (d.spots.length) map.fitBounds(L.latLngBounds(d.spots.map(place)).pad(0.3))
+            } catch (err) {
+                wait.remove()
+                add("bot", "요청에 실패했어요: " + err.message)
+            } finally {
+                document.getElementById("send").disabled = false
+            }
+        }
     </script>
 </body>
 </html>
